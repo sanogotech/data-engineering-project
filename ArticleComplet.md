@@ -35,6 +35,8 @@ git clone https://github.com/HamzaG737/data-engineering-project.git
 
 ##  Here is the overall structure of the project:
 
+```text
+
 ├── LICENSE
 ├── README.md
 ├── airflow
@@ -59,6 +61,9 @@ git clone https://github.com/HamzaG737/data-engineering-project.git
     │   └── kafka_stream_data.py
     └── spark_pgsql
         └── spark_streaming.py
+
+```
+
 The airflow directory contains a custom Dockerfile for setting up airflow and a dags directory to create and schedule the tasks.
 The data directory contains the last_processed.json file which is crucial for the Kafka streaming task. Further details on its role will be provided in the Kafka section.
 The docker-compose-airflow.yaml file defines all the services required to run airflow.
