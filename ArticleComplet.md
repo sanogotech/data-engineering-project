@@ -31,7 +31,9 @@ Now that we have a blueprint of our pipeline, let’s dive into the technical de
 Local setup
 First you can clone the Github repo on your local machine using the following command:
 
+```bash
 git clone https://github.com/HamzaG737/data-engineering-project.git
+```
 
 ##  Here is the overall structure of the project:
 
@@ -72,10 +74,14 @@ The spark directory contains a custom Dockerfile for spark setup.
 src contains the python modules needed to run the application.
 To set up your local development environment, start by installing the required Python packages. The only essential package is psycopg2-binary. You have the option to install just this package or all the packages listed in the requirements.txt file. To install all packages, use the following command:
 
+```
 pip install -r requirements.txt
+```
+
 Next let’s dive step by step into the project details.
 
-About the API
+## About the API
+
 The API is RappelConso from the French public services. It gives access to data relating to recalls of products declared by professionals in France. The data is in French and it contains initially 31 columns (or fields). Some of the most important are:
 
 reference_fiche (reference sheet): Unique identifier of the recalled product. It will act as the primary key of our Postgres database later.
@@ -111,6 +117,7 @@ The code for the kafka streaming can be found on ./src/kafka_client/kafka_stream
 
 The next step is to run the kafka service defined the docker-compose defined below:
 
+```yml
 version: '3'
 
 services:
@@ -149,19 +156,29 @@ services:
 networks:
   airflow-kafka:
     external: true
-The key highlights from this file are:
+
+```
+
+## The key highlights from this file are:
 
 The kafka service uses a base image bitnami/kafka.
 We configure the service with only one broker which is enough for our small project. A Kafka broker is responsible for receiving messages from producers (which are the sources of data), storing these messages, and delivering them to consumers (which are the sinks or end-users of the data). The broker listens to port 9092 for internal communication within the cluster and port 9094 for external communication, allowing clients outside the Docker network to connect to the Kafka broker.
 In the volumes part, we map the local directory kafka to the docker container directory /bitnami/kafka to ensure data persistence and a possible inspection of Kafka’s data from the host system.
 We set-up the service kafka-ui that uses the docker image provectuslabs/kafka-ui:latest . This provides a user interface to interact with the Kafka cluster. This is especially useful for monitoring and managing Kafka topics and messages.
+
 To ensure communication between kafka and airflow which will be run as an external service, we will use an external network airflow-kafka.
 Before running the kafka service, let’s create the airflow-kafka network using the following command:
 
+```
 docker network create airflow-kafka
+```
+
 Now everything is set to finally start our kafka service
 
-docker-compose up 
+```
+docker-compose up
+```
+
 After the services start, visit the kafka-ui at http://localhost:8800/. Normally you should get something like this:
 
 
@@ -181,12 +198,16 @@ Since we have a lot of columns for the table we want to create, we chose to crea
 
 You can run the script with the command:
 
+```
 python scripts/create_table.py
+```
+
 Note that in the script I saved the postgres password as environment variable and name it POSTGRES_PASSWORD. So if you use another method to access the password you need to modify the script accordingly.
 
 Spark Set-up
 Having set-up our Postgres database, let’s delve into the details of the spark job. The goal is to stream the data from the Kafka topic rappel_conso to the Postgres table rappel_conso_table.
 
+```
 from pyspark.sql import SparkSession
 from pyspark.sql.types import (
     StructType,
@@ -290,6 +311,9 @@ def write_to_postgres():
 
 if __name__ == "__main__":
     write_to_postgres()
+
+```
+
 Let’s break down the key highlights and functionalities of the spark job:
 
 First we create the Spark session
@@ -327,8 +351,11 @@ def create_initial_dataframe(spark_session):
         raise
 
     return df
+```
+
 3. Once the data is ingested, create_final_dataframe transforms it. It applies a schema (defined by the columns DB_FIELDS) to the incoming JSON data, ensuring that the data is structured and ready for further processing.
 
+```
 def create_final_dataframe(df):
     """
     Modifies the initial dataframe, and creates the final dataframe.
@@ -344,6 +371,7 @@ def create_final_dataframe(df):
     return df_out
 4. The start_streaming function reads existing data from the database, compares it with the incoming stream, and appends new records.
 
+```
 def start_streaming(df_parsed, spark):
     """
     Starts the streaming to table spark_streaming.rappel_conso in postgres
@@ -369,10 +397,12 @@ def start_streaming(df_parsed, spark):
         .start()
 
     return query.awaitTermination()
+
+```
 The complete code for the Spark job is in the file src/spark_pgsql/spark_streaming.py. We will use the Airflow DockerOperator to run this job, as explained in the upcoming section.
 
 Let’s go through the process of creating the Docker image we need to run our Spark job. Here’s the Dockerfile for reference:
-
+```
 FROM bitnami/spark:latest
 
 
@@ -387,6 +417,8 @@ COPY ./src/constants.py ./src/constants.py
 ENV POSTGRES_DOCKER_USER=host.docker.internal
 ARG POSTGRES_PASSWORD
 ENV POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+```
+
 In this Dockerfile, we start with the bitnami/spark image as our base. It's a ready-to-use Spark image. We then install py4j, a tool needed for Spark to work with Python.
 
 The environment variables POSTGRES_DOCKER_USER and POSTGRES_PASSWORD are set up for connecting to a PostgreSQL database. Since our database is on the host machine, we use host.docker.internal as the user. This allows our Docker container to access services on the host, in this case, the PostgreSQL database. The password for PostgreSQL is passed as a build argument, so it's not hard-coded into the image.
@@ -404,6 +436,7 @@ As said earlier, Apache Airflow serves as the orchestration tool in the data pip
 Airflow DAG
 Let’s take a look at the Directed Acyclic Graph (DAG) that will outline the sequence and dependencies of tasks, enabling Airflow to manage their execution.
 
+```
 start_date = datetime.today() - timedelta(days=1)
 
 
@@ -442,6 +475,8 @@ with DAG(
 
 
     kafka_stream_task >> spark_stream_task
+
+```
 Here are the key elements from this configuration
 
 The tasks are set to execute daily.
@@ -455,7 +490,9 @@ Here are some key details about the docker operator for the spark streaming task
 
 We will use the image rappel-conso/spark:latest specified in the Spark Set-up section.
 The command will run the Spark submit command inside the container, specifying the master as local, including necessary packages for PostgreSQL and Kafka integration, and pointing to the spark_streaming.py script that contains the logic for the Spark job.
-docker_url represents the url of the host running the docker daemon. The natural solution is to set it as unix://var/run/docker.sock and to mount the var/run/docker.sock in the airflow docker container. One problem we had with this approach is a permission error to use the socket file inside the airflow container. A common workaround, changing permissions with chmod 777 var/run/docker.sock, poses significant security risks. To circumvent this, we implemented a more secure solution using bobrik/socat as a docker-proxy. This proxy, defined in a Docker Compose service, listens on TCP port 2375 and forwards requests to the Docker socket:
+docker_url represents the url of the host running the docker daemon. The natural solution is to set it as unix://var/run/docker.sock and to mount the var/run/docker.sock in the airflow docker container. One problem we had with this approach is a permission error to use the socket file inside the airflow container. A common workaround, changing permissions with chmod 777 var/run/docker.sock, poses significant security risks. To circumvent this, we implemented a more secure solution using bobrik/socat as a docker-proxy. This proxy, defined in a Docker Compose service, 
+
+listens on TCP port 2375 and forwards requests to the Docker socket:
   docker-proxy:
     image: bobrik/socat
     command: "TCP4-LISTEN:2375,fork,reuseaddr UNIX-CONNECT:/var/run/docker.sock"
@@ -480,6 +517,7 @@ Here is an overview of the changes we made on the docker-compose configuration o
 We set the environment variable AIRFLOW__CORE__EXECUTOR to LocalExecutor.
 We removed the services airflow-worker and flower because they only work for the Celery executor. We also removed the redis caching service since it works as a backend for celery. We also won’t use the airflow-triggerer so we remove it too.
 We replaced the base image ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.7.3} for the remaining services, mainly the scheduler and the webserver, by a custom image that we will build when running the docker-compose.
+```yml
 version: '3.8'
 x-airflow-common:
   &airflow-common
@@ -497,9 +535,14 @@ volumes:
 user: "${AIRFLOW_UID:-50000}:0"
 networks:
   - airflow-kafka
+```
+
 Next, we need to create some environment variables that will be used by docker-compose:
 
+```
 echo -e "AIRFLOW_UID=$(id -u)\nAIRFLOW_PROJ_DIR=\"./airflow_resources\"" > .env
+```
+
 Where AIRFLOW_UID represents the User ID in Airflow containers and AIRFLOW_PROJ_DIR represents the airflow project directory.
 
 Now everything is set-up to run your airflow service. You can start it with this command:
