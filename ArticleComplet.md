@@ -3,8 +3,9 @@
 
 # End-to-End Data Engineering System on Real Data with Kafka, Spark, Airflow, Postgres, and Docker
 
+* https://towardsdatascience.com/end-to-end-data-engineering-system-on-real-data-with-kafka-spark-airflow-postgres-and-docker-a70e18df4090
 
-
+  
 
 This article is part of a project that’s split into two main phases. The first phase focuses on building a data pipeline. This involves getting data from an API and storing it in a PostgreSQL database. In the second phase, we’ll develop an application that uses a language model to interact with this database.
 
